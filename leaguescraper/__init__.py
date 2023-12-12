@@ -22,12 +22,6 @@ def create_url(season: int) -> str:
     return f"{BASE_URL}/{season-1}-{season}/{season-1}-{season}-Premier-League-Stats"
 
 
-def get_bs4(url: str) -> bs4.BeautifulSoup:
-    page_req = urllib.request.Request(url, headers=HEADERS)
-    page = urllib.request.urlopen(page_req)
-    return bs4.BeautifulSoup(page, "html.parser")
-
-
 class Team:
     def __init__(self, name: str, data: Dict[str, Any], season: int, rank: int):
         self._name = name
@@ -57,7 +51,9 @@ class LeagueTable:
         return "".join(map(lambda row: row.string, last.find_all("a")))
 
     def _scrape(self) -> List[Team]:
-        soup = get_bs4(create_url(self._year))
+        page_req = urllib.request.Request(create_url(self._year), headers=HEADERS)
+        page = urllib.request.urlopen(page_req)
+        soup = bs4.BeautifulSoup(page, "html.parser")
         table = list(soup.find("table").find("tbody").children)
         for i in range(1, len(table), 2):
             row = table[i]
@@ -69,8 +65,9 @@ class LeagueTable:
                     for column in range(1, len(cols))
                 },
                 self._year,
-                (i//2)+1
+                (i // 2) + 1,
             )
+
 
 
 FIELDS = [
@@ -86,7 +83,18 @@ FIELDS = [
     "goal_diff",
     "points",
     "points_avg",
+    "xg_for",
+    "xg_against",
+    "xg_diff",
+    "xg_diff_per90",
 ]
+
+def validate(data: Dict[str, Any], fields: Set[str]):
+    # if the a field in fields is not in data, then set that key to -1
+    for field in fields:
+        if field not in data:
+            data[field] = -1
+    return data
 
 if __name__ == "__main__":
     with open("leaguetables.csv", "w") as league_table_file:
@@ -94,4 +102,4 @@ if __name__ == "__main__":
         fields = set(FIELDS)
         for season in range(2000, 2024):
             for team in LeagueTable(season).teams:
-                writer.writerow(team.data(fields))
+                writer.writerow(validate(team.data(fields), fields))
