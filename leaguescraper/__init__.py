@@ -1,6 +1,4 @@
-import csv
-from typing import Any, Dict, Set, List, Union
-from time import sleep
+from typing import cast, Any, Dict, Set, List, Generator
 
 import bs4
 import urllib
@@ -8,6 +6,26 @@ import urllib.request
 
 BASE_URL = "https://fbref.com/en/comps/9"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+
+FIELDS = [
+    "season",
+    "rank",
+    "team",
+    "games",
+    "wins",
+    "ties",
+    "losses",
+    "goals_for",
+    "goals_against",
+    "goal_diff",
+    "points",
+    "points_avg",
+    "xg_for",
+    "xg_against",
+    "xg_diff",
+    "xg_diff_per90",
+]
 
 
 def create_url(season: int) -> str:
@@ -47,16 +65,25 @@ class LeagueTable:
     def season(self) -> int:
         return self._year
 
-    def _format_form(last: bs4.element.Tag) -> Dict[str, Any]:
+    """
+    def _format_form(self, last: bs4.element.Tag) -> Dict[str, Any]:
         return "".join(map(lambda row: row.string, last.find_all("a")))
+    """
 
-    def _scrape(self) -> List[Team]:
+    def _scrape(self) -> Generator[Team, None, None]:
         page_req = urllib.request.Request(create_url(self._year), headers=HEADERS)
         page = urllib.request.urlopen(page_req)
         soup = bs4.BeautifulSoup(page, "html.parser")
-        table = list(soup.find("table").find("tbody").children)
+
+        raw_table = soup.find("table")
+        assert raw_table is not None, "Could not find table"
+
+        tbody = raw_table.find("tbody")
+        assert type(tbody) == bs4.element.Tag, "Could not find table body"
+
+        table = list(tbody.children)
         for i in range(1, len(table), 2):
-            row = table[i]
+            row = cast(bs4.element.Tag, table[i])
             cols = list(row.find_all("td"))
             yield Team(
                 cols[0].find("a").string,
@@ -69,37 +96,9 @@ class LeagueTable:
             )
 
 
-
-FIELDS = [
-    "season",
-    "rank",
-    "team",
-    "games",
-    "wins",
-    "ties",
-    "losses",
-    "goals_for",
-    "goals_against",
-    "goal_diff",
-    "points",
-    "points_avg",
-    "xg_for",
-    "xg_against",
-    "xg_diff",
-    "xg_diff_per90",
-]
-
 def validate(data: Dict[str, Any], fields: Set[str]):
     # if the a field in fields is not in data, then set that key to -1
     for field in fields:
         if field not in data:
             data[field] = -1
     return data
-
-if __name__ == "__main__":
-    with open("leaguetables.csv", "w") as league_table_file:
-        writer = csv.DictWriter(league_table_file, fieldnames=FIELDS)
-        fields = set(FIELDS)
-        for season in range(2000, 2024):
-            for team in LeagueTable(season).teams:
-                writer.writerow(validate(team.data(fields), fields))
